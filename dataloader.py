@@ -3,15 +3,16 @@ import random
 import numpy as np
 from pprint import pprint
 
-def demand_generation_normal(length, do_random=False):
-    a = (np.array(range(0, length)) - length // 2) / ( random.uniform(3, 9) if do_random else 6 )
+def demand_generation_normal(length, offset=0, do_random=False):
+    a = np.roll(np.array(range(0, length)) - length // 2, offset if not do_random else int(random.uniform(-length // 2, length // 2))) 
+    a = a / ( random.uniform(3, 9) if do_random else 6 )
     return (norm().pdf(a) * ( random.uniform(60, 140) if do_random else 100 )).astype(int)
 
 jobs = list(range(0, 2))
 scenarios = list(range(0, 3))
 scenarioProbabilities = [ 1 / len(scenarios) for s in scenarios ]
 periods = list(range(0, 24))
-demands = [[ demand_generation_normal(len(periods), do_random=False) * (s + 1) // (4 + j) for j in jobs ] for s in scenarios ] # demand of worker needed on job j at period t in scenario s
+demands = [[ demand_generation_normal(len(periods), offset=s * (j * 2 - 1) * 4 ,do_random=False) * (s + 1) // (4 + j) for j in jobs ] for s in scenarios ] # demand of worker needed on job j at period t in scenario s
 schedules = [(0, 6), (3, 9), (6, 12), (9, 15), (12, 18), (15, 21), (18, 24), (21, 3)]
 schedulesIncludePeriods = [
     [ ( 1 if i[0] <= t < i[1] else 0 ) if i[0] <= i[1] else ( 1 if i[0] <= t or t < i[1] else 0 ) for t in periods ] for i in schedules
