@@ -43,16 +43,26 @@ def solve_model(objfunc, epsilon=None):
     redundant = m.addVar(name="Redundant")
     m.addConstr(redundant == gp.quicksum(r[s, j, t] for j in jobs for t in periods for s in scenarios))
 
-    #redundantVariance = m.addVar(name="Redundant Variance")
-    #m.addConstr(redundantVariance ==\
-    #    gp.quicksum((r[s, j, t] - gp.quicksum(r[s_, j_, t_] for j_ in jobs for t_ in periods for s_ in scenarios)) ** 2 for j in jobs for t in periods for s in scenarios))
+    #redundantAverage = m.addVars(len(schedules), name="Redundant Average")
+    #m.addConstrs((redundantAverage[s] ==\
+    #    ( gp.quicksum(r[s, j_, t_] for j_ in jobs for t_ in periods) / (len(jobs) * len(periods)) ) for s in scenarios)
+    #)
+
+    redundantAverage = m.addVar(name="Redundant Average")
+    m.addConstr((redundantAverage ==\
+        ( gp.quicksum(r[s_, j_, t_] for s_ in scenarios for j_ in jobs for t_ in periods) / (len(schedules) * len(jobs) * len(periods)))
+    ))
+
+    redundantVariance = m.addVar(name="Redundant Variance")
+    m.addConstr(redundantVariance ==\
+        gp.quicksum((r[s, j, t] - redundantAverage) ** 2 for j in jobs for t in periods for s in scenarios))
     
     if objfunc == "Cost":
         m.setObjective(cost, GRB.MINIMIZE)
     elif objfunc == "Redundant":
         m.setObjective(redundant, GRB.MAXIMIZE)
-    #elif objfunc == "Redundant Variance":
-    #    m.setObjective(redundantVariance, GRB.MINIMIZE)
+    elif objfunc == "Redundant Variance":
+        m.setObjective(redundantVariance, GRB.MINIMIZE)
     else:
         raise f"Wrong Objective Function {objfunc}"
     
@@ -60,6 +70,8 @@ def solve_model(objfunc, epsilon=None):
     if objfunc == "Cost" and epsilon is not None:
         m.addConstr(redundant >= epsilon["Redundant"])
         #m.addConstr(redundantVariance <= epsilon["Redundant Variance"])
+
+    m.write('epsilon-constraint-weighted-sum.lp')
 
     # Optimize
     m.optimize()
@@ -70,14 +82,14 @@ def solve_model(objfunc, epsilon=None):
         print('The optimal objective is %g' % m.objVal)
         return {
             "Cost": cost.x,
-            "Redundant": redundant.x
-            #"Redundant Variance": redundantVariance.x
+            "Redundant": redundant.x,
+            "Redundant Variance": redundantVariance.x
         }
     elif status != GRB.INF_OR_UNBD and status != GRB.INFEASIBLE:
         raise f'Optimization was stopped with status {status}'
 
 
-objFuncs = ["Cost", "Redundant"]
+objFuncs = ["Cost", "Redundant", "Redundant Variance"]
 epsilon_r = 3
 
 # objValTable[obj1][obj2] = 把 obj1 的 optimal solution 帶進 obj2 所得

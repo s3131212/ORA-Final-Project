@@ -36,7 +36,7 @@ def stage_1():
     cost = m.addVar(name="Cost")
     m.addConstr(cost ==\
         gp.quicksum(x[i] * schedulesIncludePeriods[i][t] * costOfHiring[t] for i in range(len(schedules)) for t in periods) + \
-        gp.quicksum(gp.quicksum(z[s, t] * costOfSwitching for t in periods) for s in scenarios))
+        gp.quicksum(gp.quicksum(z[s, t] * costOfSwitching for t in periods) * scenarioProbabilities[s] for s in scenarios))
 
     m.setObjective(cost, GRB.MINIMIZE)
         
@@ -44,15 +44,19 @@ def stage_1():
     m.optimize()
     status = m.status
     if status == GRB.UNBOUNDED:
-        raise "Unbounded"
+        raise Exception("Unbounded")
     elif status == GRB.OPTIMAL:
         print('The optimal objective is %g' % m.objVal)
         return {
             "x": [ x[i].x for i in range(len(schedules))],
+            "y": [[[ y[s, j, t].x for t in periods] for j in jobs ] for s in scenarios],
             "Cost": cost.x
         }
-    elif status != GRB.INF_OR_UNBD and status != GRB.INFEASIBLE:
-        raise f'Optimization was stopped with status {status}'
+    elif status == GRB.INFEASIBLE:
+        raise Exception(f'Infeasible')
+    else:
+        raise Exception(f'Optimization was stopped with status {status}')
+    return False
 
 
 def stage_2(scenario, x, objfunc, epsilon=None):
@@ -91,7 +95,7 @@ def stage_2(scenario, x, objfunc, epsilon=None):
     elif objfunc == "Redundant":
         m.setObjective(redundant, GRB.MAXIMIZE)
     else:
-        raise f"Wrong Objective Function {objfunc}"
+        raise Exception(f"Wrong Objective Function {objfunc}")
     
     # Epsilon
     if objfunc == "Cost" and epsilon is not None:
@@ -101,18 +105,23 @@ def stage_2(scenario, x, objfunc, epsilon=None):
     m.optimize()
     status = m.status
     if status == GRB.UNBOUNDED:
-        raise "Unbounded"
+        raise Exception("Unbounded")
     elif status == GRB.OPTIMAL:
         return {
             "Cost": cost.x,
             "Redundant": redundant.x
             #"Redundant Variance": redundantVariance.x
         }
-    elif status != GRB.INF_OR_UNBD and status != GRB.INFEASIBLE:
-        raise f'Optimization was stopped with status {status}'
+    elif status == GRB.INFEASIBLE:
+        raise Exception(f'Infeasible')
+    else:
+        raise Exception(f'Optimization was stopped with status {status}')
+    return False
 
 stage_1_result = stage_1()
-print("stage 1 results:", stage_1_result)
+print("stage 1 results:")
+pprint(stage_1_result, width=512)
+
 
 objFuncs = ["Cost", "Redundant"]
 epsilon_r = 3
