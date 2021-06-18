@@ -12,31 +12,35 @@ def solve_model(objfunc, scenario, epsilon=None):
     # Variable
     x = m.addVars(len(schedules), name="x", vtype=GRB.INTEGER) # number of worker work on schedule i (integer)
     y = m.addVars(len(jobs), len(periods), name="y", vtype=GRB.INTEGER) # number of worker work on job j on period t (integer)
-    z = m.addVars(len(periods), name="z") # number of worker changing job at the start of period t(integer)
+    z = m.addVars(len(jobs), len(periods), name="z") # number of changes in job j at the start of period t(integer)
     r = m.addVars(len(jobs), len(periods), name="r") # number of extra manpower on job j, period t (integer)
+    l = m.addVars(len(jobs), len(periods), name="l", vtype=GRB.INTEGER) # number of outsourcing worker on job j, period t (integer)
 
     # Model
     m.addConstrs(
         ((gp.quicksum(y[j, t] for j in jobs) == gp.quicksum(x[i] * schedulesIncludePeriods[i][t] for i in range(len(schedules))))\
         for t in periods), name='分配到工作的人數要符合上班人數') # 分配到工作的人數要符合上班人數
-    m.addConstrs((y[j, t] >= demands[scenario][j][t] for j in jobs for t in periods), name="值班人數要滿足需求") # 值班人數要滿足需求
+    m.addConstrs((y[j, t] + l[j, t] >= demands[scenario][j][t] for j in jobs for t in periods), name="值班人數要滿足需求") # 值班人數要滿足需求
     m.addConstrs((y[j, t] <= workerNumWithJobSkills[j] for j in jobs for t in periods), name="任一時段，每個技能的值班人數 <= 總持有技能人數") # 任一時段，每個技能的值班人數 <= 總持有技能人數
+    m.addConstrs((l[j, t] <= outsourcingLimit[j][t] for j in jobs for t in periods), name="任一時段，每個外包人數 <= 可用外包人數") # 任一時段，每個外包人數 <= 可用外包人數
     m.addConstr((gp.quicksum(x[i] for i in range(len(schedules))) <= sum(workerNumWithJobSkills) - workerNumWithBothSkills), name="總上班人數 <= 總員工數") # 總上班人數 <= 總員工數
     m.addConstrs(
-        (r[j, t] == y[j, t] - demands[scenario][j][t] \
+        (r[j, t] == y[j, t] + l[j, t] - demands[scenario][j][t] \
         for j in jobs for t in periods), name='redundant') # redundant
     m.addConstrs(
-        (z[t] >= y[j, t] - y[j, t - 1] \
+        (z[j, t] >= y[j, t] - y[j, t - 1] \
         for j in jobs for t in range(1, len(periods))), name='中途轉換次數(取絕對值)_1') # 中途轉換次數(取絕對值)
     m.addConstrs(
-        (z[t] >= y[j, t - 1] - y[j, t] \
+        (z[j, t] >= y[j, t - 1] - y[j, t] \
         for j in jobs for t in range(1, len(periods))), name='中途轉換次數(取絕對值)_2') # 中途轉換次數(取絕對值)
 
     # Objective Function
     cost = m.addVar(name="Cost")
     m.addConstr(cost == \
-            (gp.quicksum(gp.quicksum(y[j, t] for j in jobs) * costOfHiring[t] for t in periods) +
-            gp.quicksum((z[t] for t in periods)) * costOfSwitching))
+            gp.quicksum(gp.quicksum(y[j, t] for j in jobs) * costOfHiring[t] for t in periods) +
+            gp.quicksum(z[j, t] for j in jobs for t in periods) * costOfSwitching +
+            gp.quicksum((l[j, t] * costOfOutsourcing[j][t] for j in jobs for t in periods))
+        )
 
     redundant = m.addVar(name="Redundant")
     m.addConstr(redundant == gp.quicksum(r[j, t] for j in jobs for t in periods))

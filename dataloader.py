@@ -17,11 +17,12 @@ schedules = [(0, 6), (3, 9), (6, 12), (9, 15), (12, 18), (15, 21), (18, 24), (21
 schedulesIncludePeriods = [
     [ ( 1 if i[0] <= t < i[1] else 0 ) if i[0] <= i[1] else ( 1 if i[0] <= t or t < i[1] else 0 ) for t in periods ] for i in schedules
 ] # schedule i include period t or not (binary)
-workerNumWithJobSkills = [ 100 for j in jobs ] # number of workers who have the skill for job j
+workerNumWithJobSkills = [ 70 for j in jobs ] # number of workers who have the skill for job j
 workerNumWithBothSkills = 30 # number of workers who have both skills
 costOfHiring = [10 for i in periods] # cost of hiring a worker to work at period t
 costOfSwitching = 5 # cost of letting a worker change jobs at the middle of a day
-costOfContingentWorker = [[ 20 for j in jobs ] for i in periods] # cost of hiring a contingent worker for job i at period t
+costOfOutsourcing = [[ 100 for t in periods ] for j in jobs] # Cost of satisfied an unit of demand by outsourcing for job j on period t
+outsourcingLimit = [[ 10 for t in periods ] for j in jobs] # numbers on outsourcing workers for job j on period t
 
 print("demands:")
 pprint(demands)
