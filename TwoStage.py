@@ -3,9 +3,12 @@ from gurobipy import GRB
 import sys
 from pprint import pprint
 import itertools
+import pandas as pd                # use DataFrame
+import time                        # caculate time spend
 
 # Parameter
 from dataloader import * 
+import dataloader2
 
 class TwoStage:
     def __init__(self, data):
@@ -120,7 +123,7 @@ class TwoStage:
         m.optimize()
         status = m.status
         if status == GRB.UNBOUNDED:
-            print(f"{scenario=}, {x=}, {objfunc=}, {epsilon=}")
+            # print(f"{scenario=}, {x=}, {objfunc=}, {epsilon=}")
             raise Exception("Unbounded")
         elif status == GRB.OPTIMAL:
             return {
@@ -130,10 +133,10 @@ class TwoStage:
                 #"Redundant Variance": redundantVariance.x
             }
         elif status == GRB.INFEASIBLE:
-            print(f"{scenario=}, {x=}, {objfunc=}, {epsilon=}")
+            # print(f"{scenario=}, {x=}, {objfunc=}, {epsilon=}")
             raise Exception(f'Infeasible')
         else:
-            print(f"{scenario=}, {x=}, {objfunc=}, {epsilon=}")
+            # print(f"{scenario=}, {x=}, {objfunc=}, {epsilon=}")
             raise Exception(f'Optimization was stopped with status {status}')
         return False
 
@@ -150,6 +153,7 @@ class TwoStage:
 
         solutions = dict()
 
+        # for each scenario, caculate stage-2
         for scenario in (self.data.scenarios if scenario is None else [scenario]):
             # objValTable[obj1][obj2] = 把 obj1 的 optimal solution 帶進 obj2 所得
             objValTable = { objFunc: self.stage_2(scenario, stage_1_result['x'], objFunc) for objFunc in objFuncs } 
@@ -158,12 +162,53 @@ class TwoStage:
             epsilon = { objFunc: [ calculateEpsilonInterpolation(objFunc, r, epsilon_r, objValTable) for r in range(epsilon_r + 1) ] for objFunc in objFuncs[1:] }
             epsilon_pairs = list(itertools.product(*[[(t[0], e) for e in t[1]] for t in epsilon.items()]))
 
+            # for each epsilon_s (s=scenario), caculate stage-2
             solutions[scenario] = list()
             for epsilon_pair in epsilon_pairs:
                 solutions[scenario].append(self.stage_2(scenario, stage_1_result['x'], "Cost", epsilon=dict(epsilon_pair)))
 
         return solutions
 
+
+
+################################################################################
+SAMPLE_N = 1000         # how many samples
+r = 6 #3           # r of epsilon: how many slice
+################################################################################
+
 if __name__ == '__main__':
-    two_stage_model = TwoStage(generate_data())
-    pprint(two_stage_model.drive())
+    print("Start to run Basic Model, ", SAMPLE_N, "samples.")
+    startTime = time.time()   # record start time
+    stage1_samples = pd.DataFrame()  # define a DataFrame to put results
+    stage2_samples = pd.DataFrame()  # define a DataFrame to put results per scenario & epsilon
+    
+    # loops for each sample
+    for i in range(SAMPLE_N):
+        sampleTime = time.time()  # caluate a single time of time
+
+        # solve model
+        data = dataloader2.generate_data(do_random = True)
+        two_stage_model = TwoStage(data)                        # solve model
+        stage2_result = two_stage_model.drive(epsilon_r = r)    # return result of model
+
+        # record related data
+        sampleTime = time.time() - sampleTime   # record time spend
+        for s in stage2_result.keys():     # s = scenario, and two_stage_model.drive() is dict
+            for sol in stage2_result[s]:   # stage2_result[s] is a list
+                sol_ = sol
+                sol_['scenario'] = s
+                sol_['sample'] = i         # record which sample it is
+                sol_['Time(sec)'] = sampleTime
+                stage2_samples = stage2_samples.append(sol, ignore_index = True)
+        print("sample", i, "solved.")
+
+    # save as csv and draw the plot
+    dataloader2.save_and_plot(stage2_samples, n = SAMPLE_N,
+        color = stage2_samples['scenario'],
+        labels = ["scenario " + str(i) for i in data.scenarios],
+        path = "./result/", model = "twoStage-stage2_r"+str(r))
+    print('Total time:', time.time() - startTime)
+
+# if __name__ == '__main__':
+#     two_stage_model = TwoStage(generate_data())
+#     pprint(two_stage_model.drive())

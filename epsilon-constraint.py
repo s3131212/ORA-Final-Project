@@ -3,51 +3,56 @@ from gurobipy import GRB
 import sys
 from pprint import pprint
 import itertools
+import pandas as pd                # use DataFrame
+import time                        # caculate time spend
 
 # Parameter
 from dataloader import * 
+import dataloader2
 
-def solve_model(objfunc, scenario, epsilon=None):
+
+
+def solve_model(data, objfunc, scenario, epsilon=None):
     m = gp.Model("assignment")
     # Variable
-    x = m.addVars(len(schedules), name="x", vtype=GRB.INTEGER) # number of worker work on schedule i (integer)
-    y = m.addVars(len(jobs), len(periods), name="y", vtype=GRB.INTEGER) # number of worker work on job j on period t (integer)
-    z = m.addVars(len(jobs), len(periods), name="z") # number of changes in job j at the start of period t(integer)
-    r = m.addVars(len(jobs), len(periods), name="r") # number of extra manpower on job j, period t (integer)
-    l = m.addVars(len(jobs), len(periods), name="l", vtype=GRB.INTEGER) # number of outsourcing worker on job j, period t (integer)
+    x = m.addVars(len(data.schedules), name="x", vtype=GRB.INTEGER) # number of worker work on schedule i (integer)
+    y = m.addVars(len(data.jobs), len(data.periods), name="y", vtype=GRB.INTEGER) # number of worker work on job j on period t (integer)
+    z = m.addVars(len(data.jobs), len(data.periods), name="z") # number of changes in job j at the start of period t(integer)
+    r = m.addVars(len(data.jobs), len(data.periods), name="r") # number of extra manpower on job j, period t (integer)
+    l = m.addVars(len(data.jobs), len(data.periods), name="l", vtype=GRB.INTEGER) # number of outsourcing worker on job j, period t (integer)
 
     # Model
     m.addConstrs(
-        ((gp.quicksum(y[j, t] for j in jobs) == gp.quicksum(x[i] * schedulesIncludePeriods[i][t] for i in range(len(schedules))))\
-        for t in periods), name='分配到工作的人數要符合上班人數') # 分配到工作的人數要符合上班人數
-    m.addConstrs((y[j, t] + l[j, t] >= demands[scenario][j][t] for j in jobs for t in periods), name="值班人數要滿足需求") # 值班人數要滿足需求
-    m.addConstrs((y[j, t] <= workerNumWithJobSkills[j] for j in jobs for t in periods), name="任一時段，每個技能的值班人數 <= 總持有技能人數") # 任一時段，每個技能的值班人數 <= 總持有技能人數
-    m.addConstrs((l[j, t] <= outsourcingLimit[j][t] for j in jobs for t in periods), name="任一時段，每個外包人數 <= 可用外包人數") # 任一時段，每個外包人數 <= 可用外包人數
-    m.addConstr((gp.quicksum(x[i] for i in range(len(schedules))) <= sum(workerNumWithJobSkills) - workerNumWithBothSkills), name="總上班人數 <= 總員工數") # 總上班人數 <= 總員工數
+        ((gp.quicksum(y[j, t] for j in data.jobs) == gp.quicksum(x[i] * data.schedulesIncludePeriods[i][t] for i in range(len(data.schedules))))\
+        for t in data.periods), name='分配到工作的人數要符合上班人數') # 分配到工作的人數要符合上班人數
+    m.addConstrs((y[j, t] + l[j, t] >= data.demands[scenario][j][t] for j in data.jobs for t in data.periods), name="值班人數要滿足需求") # 值班人數要滿足需求
+    m.addConstrs((y[j, t] <= data.workerNumWithJobSkills[j] for j in data.jobs for t in data.periods), name="任一時段，每個技能的值班人數 <= 總持有技能人數") # 任一時段，每個技能的值班人數 <= 總持有技能人數
+    m.addConstrs((l[j, t] <= data.outsourcingLimit[j][t] for j in data.jobs for t in data.periods), name="任一時段，每個外包人數 <= 可用外包人數") # 任一時段，每個外包人數 <= 可用外包人數
+    m.addConstr((gp.quicksum(x[i] for i in range(len(data.schedules))) <= sum(data.workerNumWithJobSkills) - data.workerNumWithBothSkills), name="總上班人數 <= 總員工數") # 總上班人數 <= 總員工數
     m.addConstrs(
-        (r[j, t] == y[j, t] + l[j, t] - demands[scenario][j][t] \
-        for j in jobs for t in periods), name='redundant') # redundant
+        (r[j, t] == y[j, t] + l[j, t] - data.demands[scenario][j][t] \
+        for j in data.jobs for t in data.periods), name='redundant') # redundant
     m.addConstrs(
         (z[j, t] >= y[j, t] - y[j, t - 1] \
-        for j in jobs for t in range(1, len(periods))), name='中途轉換次數(取絕對值)_1') # 中途轉換次數(取絕對值)
+        for j in data.jobs for t in range(1, len(data.periods))), name='中途轉換次數(取絕對值)_1') # 中途轉換次數(取絕對值)
     m.addConstrs(
         (z[j, t] >= y[j, t - 1] - y[j, t] \
-        for j in jobs for t in range(1, len(periods))), name='中途轉換次數(取絕對值)_2') # 中途轉換次數(取絕對值)
+        for j in data.jobs for t in range(1, len(data.periods))), name='中途轉換次數(取絕對值)_2') # 中途轉換次數(取絕對值)
 
     # Objective Function
     cost = m.addVar(name="Cost")
     m.addConstr(cost == \
-            gp.quicksum(gp.quicksum(y[j, t] for j in jobs) * costOfHiring[t] for t in periods) +
-            gp.quicksum(z[j, t] for j in jobs for t in periods) * costOfSwitching +
-            gp.quicksum((l[j, t] * costOfOutsourcing[j][t] for j in jobs for t in periods))
+            gp.quicksum(gp.quicksum(y[j, t] for j in data.jobs) * data.costOfHiring[t] for t in data.periods) +
+            gp.quicksum(z[j, t] for j in data.jobs for t in data.periods) * data.costOfSwitching +
+            gp.quicksum((l[j, t] * data.costOfOutsourcing[j][t] for j in data.jobs for t in data.periods))
         )
 
     redundant = m.addVar(name="Redundant")
-    m.addConstr(redundant == gp.quicksum(r[j, t] for j in jobs for t in periods))
+    m.addConstr(redundant == gp.quicksum(r[j, t] for j in data.jobs for t in data.periods))
 
     #redundantVariance = m.addVar(name="Redundant Variance")
     #m.addConstr(redundantVariance ==\
-    #    gp.quicksum((r[j, t] - gp.quicksum(r[j_, t_] for j_ in jobs for t_ in periods)) ** 2 for j in jobs for t in periods))
+    #    gp.quicksum((r[j, t] - gp.quicksum(r[j_, t_] for j_ in jobs for t_ in data.periods)) ** 2 for j in data.jobs for t in data.periods))
     
     if objfunc == "Cost":
         m.setObjective(cost, GRB.MINIMIZE)
@@ -77,27 +82,77 @@ def solve_model(objfunc, scenario, epsilon=None):
     elif status != GRB.INF_OR_UNBD and status != GRB.INFEASIBLE:
         raise f'Optimization was stopped with status {status}'
 
-
+################################################################################
+SAMPLE_N = 1000         # how many samples
 objFuncs = ["Cost", "Redundant"]
-epsilon_r = 3
+epsilon_r = 6#3
+################################################################################
 
 def calculateEpsilonInterpolation(objFunc, r, epsilon_r, objValTable):
     objVals = [objValTable[objFuncOriginal][objFunc] for objFuncOriginal in objFuncs]
     return min(objVals) + (max(objVals) - min(objVals)) * r / epsilon_r
 
-for s in scenarios:
-    # objValTable[obj1][obj2] = 把 obj1 的 optimal solution 帶進 obj2 所得
-    objValTable = { objFunc: solve_model(objFunc, scenario=s) for objFunc in objFuncs } 
-    pprint(objValTable)
 
-    epsilon = { objFunc: [ calculateEpsilonInterpolation(objFunc, r, epsilon_r, objValTable) for r in range(epsilon_r + 1) ] for objFunc in objFuncs[1:] }
-    print("epsilon:", epsilon)
-    epsilon_pairs = list(itertools.product(*[[(t[0], e) for e in t[1]] for t in epsilon.items()]))
-    print("epsilon_pairs:", epsilon_pairs)
+# for s in scenarios:
+#     # objValTable[obj1][obj2] = 把 obj1 的 optimal solution 帶進 obj2 所得
+#     objValTable = { objFunc: solve_model(objFunc, scenario=s) for objFunc in objFuncs } 
+#     pprint(objValTable)
 
-    solutions = list()
-    for epsilon_pair in epsilon_pairs:
-        solutions.append(solve_model("Cost", epsilon=dict(epsilon_pair), scenario=s))
+#     epsilon = { objFunc: [ calculateEpsilonInterpolation(objFunc, r, epsilon_r, objValTable) for r in range(epsilon_r + 1) ] for objFunc in objFuncs[1:] }
+#     print("epsilon:", epsilon)
+#     epsilon_pairs = list(itertools.product(*[[(t[0], e) for e in t[1]] for t in epsilon.items()]))
+#     print("epsilon_pairs:", epsilon_pairs)
 
-    print("solutions:")
-    pprint(solutions)
+#     solutions = list()
+#     for epsilon_pair in epsilon_pairs:
+#         solutions.append(solve_model("Cost", epsilon=dict(epsilon_pair), scenario=s))
+
+#     print("solutions:")
+#     pprint(solutions)
+
+
+
+
+if __name__ == '__main__':
+    print("Start to run Epsilon Basic Model", SAMPLE_N, "samples.")
+    startTime = time.time()   # record start time
+    solutions = pd.DataFrame()  # define a DataFrame to put results of each epsilon, each sample
+    
+    # loops for each sample
+    for i in range(SAMPLE_N):
+        sampleTime = time.time()  # caluate a single time of time
+        data = dataloader2.generate_data(do_random = True)
+
+        # solve model
+        for s in data.scenarios:
+            # objValTable[obj1][obj2] = 把 obj1 的 optimal solution 帶進 obj2 所得
+            objValTable = { objFunc: solve_model(data, objFunc, scenario=s) for objFunc in objFuncs } 
+            # print("objValTable:")
+            # pprint(objValTable)
+
+            epsilon = { objFunc: [ calculateEpsilonInterpolation(objFunc, r, epsilon_r, objValTable) for r in range(epsilon_r + 1) ] for objFunc in objFuncs[1:] }
+            # print("epsilon:", epsilon)
+            epsilon_pairs = list(itertools.product(*[[(t[0], e) for e in t[1]] for t in epsilon.items()]))
+            # print("epsilon_pairs:", epsilon_pairs)
+
+            solutions_inSample = list()
+            for epsilon_pair in epsilon_pairs:
+                sol = solve_model(data, "Cost", epsilon=dict(epsilon_pair), scenario=s)
+                sol['epsilon'] = epsilon_pair[0][1]   # save the epsilon
+                sol['binding(1)'] = sol['Redundant'] == epsilon_pair[0][1]  # binding on objective or not
+                sol['sample'] = i       # record which sample it is
+                sol['scenario'] = s     # record what scenario it is                 # record demand
+                sol['Time(sec)'] = time.time() - sampleTime   # record time spend  
+                solutions_inSample.append(sol)
+            
+            # save result           
+            solutions = solutions.append(solutions_inSample, ignore_index = True)
+        print("sample", i, "solved.")
+
+    # save as csv and draw the plot
+    dataloader2.save_and_plot(solutions, n=SAMPLE_N,
+        frontierCol="binding(1)",
+        color = solutions['scenario'],
+        labels = ["scenario " + str(i) for i in data.scenarios],
+        path = "./result/", model = "epsilon_sol_r"+str(r))
+    print('Total time:', time.time() - startTime)

@@ -2,15 +2,18 @@ import gurobipy as gp
 from gurobipy import GRB
 import sys
 from pprint import pprint
+import pandas as pd                # use DataFrame
+import time                        # caculate time spend
 
 # Parameter
 from dataloader import * 
+import dataloader2
 
 class Basic:
     def __init__(self, data):
         self.data = data
     def solve_model(self):
-        m = gp.Model("assignment")
+        m = gp.Model("basic")
         
         # Variable
         x = m.addVars(len(self.data.schedules), name="x", vtype=GRB.INTEGER) # number of worker work on schedule i (integer)
@@ -71,6 +74,33 @@ class Basic:
     def drive(self):
         return self.solve_model()
 
+
+
+################################################################################
+SAMPLE_N = 1000         # how many samples
+################################################################################
+
+
 if __name__ == '__main__':
-    basic_model = Basic(generate_data())
-    print(basic_model.drive())
+    print("Start to run Basic Model, ", SAMPLE_N, "samples.")
+    startTime = time.time()   # record start time
+    samples = pd.DataFrame()  # define a DataFrame to put results
+    
+    # loops for each sample
+    for i in range(SAMPLE_N):
+        sampleTime = time.time()  # caluate a single time of time
+
+        # solve model
+        data = dataloader2.generate_data(do_random = True)
+        basic_model = Basic(data)                           # solve model
+        newSample = basic_model.drive()                     # return result of model
+        
+        # record related data
+        newSample['sample'] = i       # record which sample it is
+        newSample['Time(sec)'] = time.time() - sampleTime   # record time spend
+        samples = samples.append(newSample, ignore_index = True)  # save in DataFrame
+        print("sample", i, "solved.")
+
+    # save as csv and draw the plot
+    dataloader2.save_and_plot(samples, color = [1]*len(samples), path = "./result/", model = "basic")
+    print('Total time:', time.time() - startTime)
