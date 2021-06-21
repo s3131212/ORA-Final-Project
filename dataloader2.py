@@ -61,6 +61,7 @@ def generate_data(nJob=2, nPeriods=24, nScenario=3, scenarioP=None,
         nWorker=90, twoSkill_worker=30, outsourcingLimit = 10,
         cHire=10, cSwitch=5, cOutsourcing=100,
         schedule="6 hours, per 3 hours", do_random=True,
+        demandTimes = 1,
         dataPath = None):
     if dataPath==None:
         data = TestData(nJob, nPeriods, nScenario, scenarioP,
@@ -71,7 +72,7 @@ def generate_data(nJob=2, nPeriods=24, nScenario=3, scenarioP=None,
         # data.scenarios = list(range(0, 3))
         # data.scenarioProbabilities = [ 1 / len(data.scenarios) for s in data.scenarios ]
         # data.periods = list(range(0, 24))
-        data.demands = [[ demand_generation_normal(len(data.periods), offset=s * (j * 2 - 1) * 4 ,do_random=do_random) * (s + 1) // (4 + j) for j in data.jobs ] for s in data.scenarios ] # demand of worker needed on job j at period t in scenario s
+        data.demands = [[ demandTimes * demand_generation_normal(len(data.periods), offset=s * (j * 2 - 1) * 4 ,do_random=do_random) * (s + 1) // (4 + j) for j in data.jobs ] for s in data.scenarios ] # demand of worker needed on job j at period t in scenario s
         # data.schedules = [(0, 6), (3, 9), (6, 12), (9, 15), (12, 18), (15, 21), (18, 24), (21, 3)]
         # data.schedulesIncludePeriods = [
         #     [ ( 1 if i[0] <= t < i[1] else 0 ) if i[0] <= i[1] else ( 1 if i[0] <= t or t < i[1] else 0 ) for t in data.periods ] for i in data.schedules
@@ -132,25 +133,41 @@ def save_and_plot(dfSample, n=None, frontierCol=None,
 
 
 
-def generate_and_save(n=1000,
+def generate_and_save(n=1000, filePath="./data/",
     nJob=2, nPeriods=24, nScenario=3, scenarioP=None,
     nWorker=90, twoSkill_worker=30, outsourcingLimit = 10,
     cHire=10, cSwitch=5, cOutsourcing=100,
     schedule="6 hours, per 3 hours", do_random=True):
+    # generate basic data
+    data = generate_data(nJob, nPeriods, nScenario, scenarioP,
+        nWorker, twoSkill_worker, outsourcingLimit,
+        cHire, cSwitch, cOutsourcing, schedule, do_random)
+    # get data from class
+    menbers = [attr for attr in dir(data) if not callable(getattr(data, attr)) 
+        and not attr.startswith("__")]   # get all not function menber in a class
+    for m in menbers:
+        if m != "demands":
+            print(m)
+            # data to DataFrame
+            df = pd.DataFrame(getattr(data, m)) # get value by menber name  
+            # data to csv
+            fileName = filePath + m + ".csv"
+            df.to_csv(fileName)
+            print("Data generated has saved as", fileName)
 
     for i in range(n):
         # generate data
         data = generate_data(nJob, nPeriods, nScenario, scenarioP,
             nWorker, twoSkill_worker, outsourcingLimit,
             cHire, cSwitch, cOutsourcing, schedule, do_random)
+        # data to DataFrame
+        df = pd.DataFrame(data.demands)
         # data to csv
-        # print(vars(data))
-    #     df = pd.DataFrame([vars(v) for v in data])
-    #     fileName = "./data/n" + str(n) + "/data("+ str(i) + ").csv"
-    #     df.to_csv(fileName)
-    #     print("Data generated has saved as", fileName)
-    # print("All", n, "data have saved.")
+        fileName = filePath + "demands_"+ str(i) + ".csv"
+        df.to_csv(fileName)
+        print("Data generated has saved as", fileName)
+    print("All", n, "data have saved.")
 
 
 if __name__ == '__main__':
-    generate_and_save(n=1000)
+    generate_and_save(n=2, filePath="n1000")

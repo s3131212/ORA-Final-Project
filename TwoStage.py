@@ -173,7 +173,10 @@ class TwoStage:
 
 ################################################################################
 SAMPLE_N = 1000         # how many samples
-r = 6 #3           # r of epsilon: how many slice
+r = 6 #3                # r of epsilon: how many slice
+csw = 5                # cost of switching job, basic 5
+ol = 150                 # outsourcingLimit, basic 10
+dt = 3                 # times demand to make demand larger, basic 1
 ################################################################################
 
 if __name__ == '__main__':
@@ -187,7 +190,8 @@ if __name__ == '__main__':
         sampleTime = time.time()  # caluate a single time of time
 
         # solve model
-        data = dataloader2.generate_data(do_random = True)
+        data = dataloader2.generate_data(do_random = True, 
+            cSwitch=csw, outsourcingLimit=ol, demandTimes=dt)
         two_stage_model = TwoStage(data)                        # solve model
         stage2_result = two_stage_model.drive(epsilon_r = r)    # return result of model
 
@@ -204,9 +208,11 @@ if __name__ == '__main__':
 
     # save as csv and draw the plot
     dataloader2.save_and_plot(stage2_samples, n = SAMPLE_N,
+        # frontierCol="binding(1)",
         color = stage2_samples['scenario'],
         labels = ["scenario " + str(i) for i in data.scenarios],
-        path = "./result/", model = "twoStage-stage2_r"+str(r))
+        path = "./result/", model = "twoStage-stage2_r"+str(r)\
+            +"_cSwitch" + str(csw) + "_outsource" + str(ol) + "_demand-x-" + str(dt))
     print('Total time:', time.time() - startTime)
 
 # if __name__ == '__main__':
