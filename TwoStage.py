@@ -174,9 +174,9 @@ class TwoStage:
 ################################################################################
 SAMPLE_N = 1000         # how many samples
 r = 6 #3                # r of epsilon: how many slice
-csw = 5                # cost of switching job, basic 5
-ol = 150                 # outsourcingLimit, basic 10
-dt = 3                 # times demand to make demand larger, basic 1
+csw = 50                # cost of switching job, basic 5
+ol = 150                # outsourcingLimit, basic 10
+dt = 2                  # times demand to make demand larger, basic 1
 ################################################################################
 
 if __name__ == '__main__':
