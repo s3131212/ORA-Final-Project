@@ -5,6 +5,7 @@ from pprint import pprint
 import itertools
 import pandas as pd                # use DataFrame
 import time                        # caculate time spend
+import matplotlib.pyplot as plt    # draw the plot
 
 # Parameter
 from dataloader import * 
@@ -83,9 +84,14 @@ def solve_model(data, objfunc, scenario, epsilon=None):
         raise f'Optimization was stopped with status {status}'
 
 ################################################################################
-SAMPLE_N = 1000         # how many samples
+SAMPLE_N = 25         # how many samples
 objFuncs = ["Cost", "Redundant"]
 epsilon_r = 6#3
+# basic cost, switch:hire:outsource = 5:10:100
+ch = 20      # cost of hire, basic 10
+csw = 10             # cost of switching job, basic 5
+ol = 10                # outsourcingLimit, basic 10
+dt = 1                  # times demand to make demand larger, basic 1
 ################################################################################
 
 def calculateEpsilonInterpolation(objFunc, r, epsilon_r, objValTable):
@@ -121,7 +127,8 @@ if __name__ == '__main__':
     # loops for each sample
     for i in range(SAMPLE_N):
         sampleTime = time.time()  # caluate a single time of time
-        data = dataloader2.generate_data(do_random = True)
+        data = dataloader2.generate_data(do_random = (SAMPLE_N!=1), 
+            cHire=ch, cSwitch=csw, outsourcingLimit=ol, demandTimes=dt)
 
         # solve model
         for s in data.scenarios:
@@ -144,15 +151,27 @@ if __name__ == '__main__':
                 sol['scenario'] = s     # record what scenario it is                 # record demand
                 sol['Time(sec)'] = time.time() - sampleTime   # record time spend  
                 solutions_inSample.append(sol)
-            
+
             # save result           
             solutions = solutions.append(solutions_inSample, ignore_index = True)
+
+            # draw a solution
+            df = pd.DataFrame(solutions_inSample)
+            plt.plot(df['Cost'], df['Redundant'],
+                linestyle='-', markersize=1, alpha = 0.5)  # all points
+            highlightfilter = (df['binding(1)'] == True)
+            plt.scatter(df['Cost'][highlightfilter], df['Redundant'][highlightfilter],
+                marker='x', s=2)
+
         print("sample", i, "solved.")
+
 
     # save as csv and draw the plot
     dataloader2.save_and_plot(solutions, n=SAMPLE_N,
         frontierCol="binding(1)",
         color = solutions['scenario'],
         labels = ["scenario " + str(i) for i in data.scenarios],
-        path = "./result/", model = "epsilon_sol_r"+str(r))
+        path = "./result/", model = "epsilon_r"+str(epsilon_r)\
+            + "_cH" + str(ch)\
+            +"_cS" + str(csw) + "_osL" + str(ol) + "_d" + str(dt))
     print('Total time:', time.time() - startTime)

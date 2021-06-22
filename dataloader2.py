@@ -127,9 +127,10 @@ def save_and_plot(dfSample, n=None, frontierCol=None,
             marker =  "o", alpha = 0.5)  # all points        
     plt.xlabel('Cost')       # set the name of x axis
     plt.ylabel('Redundant')
-    plt.title("Scatter Plot of " + str(sample_n) + " sample") # set title
+    plt.title("Plot of " + model) # set title
     plt.savefig(path + fileName + ".png", dpi=None)
     print("Plot has saved as", path + fileName + ".png")
+
 
 
 

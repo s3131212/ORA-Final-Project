@@ -5,6 +5,7 @@ from pprint import pprint
 import itertools
 import pandas as pd                # use DataFrame
 import time                        # caculate time spend
+import matplotlib.pyplot as plt    # draw the plot
 
 # Parameter
 from dataloader import * 
@@ -172,11 +173,13 @@ class TwoStage:
 
 
 ################################################################################
-SAMPLE_N = 1000         # how many samples
-r = 6 #3                # r of epsilon: how many slice
-csw = 50                # cost of switching job, basic 5
-ol = 150                # outsourcingLimit, basic 10
-dt = 2                  # times demand to make demand larger, basic 1
+SAMPLE_N = 1         # how many samples
+r = 10 #3                # r of epsilon: how many slice
+# basic cost, switch:hire:outsource = 5:10:100
+ch = 10      # cost of hire, basic 10
+csw = 50             # cost of switching job, basic 5
+ol = 10                # outsourcingLimit, basic 10
+dt = 1                  # times demand to make demand larger, basic 1
 ################################################################################
 
 if __name__ == '__main__':
@@ -190,13 +193,14 @@ if __name__ == '__main__':
         sampleTime = time.time()  # caluate a single time of time
 
         # solve model
-        data = dataloader2.generate_data(do_random = True, 
-            cSwitch=csw, outsourcingLimit=ol, demandTimes=dt)
+        data = dataloader2.generate_data(do_random = (SAMPLE_N!=1), 
+            cHire=ch, cSwitch=csw, outsourcingLimit=ol, demandTimes=dt)
         two_stage_model = TwoStage(data)                        # solve model
         stage2_result = two_stage_model.drive(epsilon_r = r)    # return result of model
 
         # record related data
         sampleTime = time.time() - sampleTime   # record time spend
+        solutions_inSample = list()
         for s in stage2_result.keys():     # s = scenario, and two_stage_model.drive() is dict
             for sol in stage2_result[s]:   # stage2_result[s] is a list
                 sol_ = sol
@@ -204,15 +208,28 @@ if __name__ == '__main__':
                 sol_['sample'] = i         # record which sample it is
                 sol_['Time(sec)'] = sampleTime
                 stage2_samples = stage2_samples.append(sol, ignore_index = True)
+                solutions_inSample.append(sol)
+            
+            # draw a solution
+            df = pd.DataFrame(solutions_inSample)
+            plt.plot(df['Cost'], df['Redundant'],
+                linestyle='-', markersize=1, alpha = 0.5)  # all points
+        
         print("sample", i, "solved.")
 
     # save as csv and draw the plot
-    dataloader2.save_and_plot(stage2_samples, n = SAMPLE_N,
-        # frontierCol="binding(1)",
+    # dataloader2.save_and_plot(stage2_samples, n = SAMPLE_N,
+    #     # frontierCol="binding(1)",
+    #     color = stage2_samples['scenario'],
+    #     labels = ["scenario " + str(i) for i in data.scenarios],
+    #     path = "./result/", model = "twoStage-stage2_r"+str(r)\
+    #         +"_cSwitch" + str(csw) + "_outsource" + str(ol) + "_demand-x-" + str(dt))
+    dataloader2.save_and_plot(stage2_samples, n=SAMPLE_N,
         color = stage2_samples['scenario'],
-        labels = ["scenario " + str(i) for i in data.scenarios],
-        path = "./result/", model = "twoStage-stage2_r"+str(r)\
-            +"_cSwitch" + str(csw) + "_outsource" + str(ol) + "_demand-x-" + str(dt))
+        path = "./result/", 
+        model = "twoStage-stage2_r"+str(r)\
+            + "_cH" + str(ch)\
+            +"_cS" + str(csw) + "_osL" + str(ol) + "_d" + str(dt))
     print('Total time:', time.time() - startTime)
 
 # if __name__ == '__main__':
